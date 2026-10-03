@@ -1,58 +1,51 @@
-# PES 2021 + Sider on a headless Linux server
+# PES 2021 Sider mods on a headless Linux host
 
-These are the steps I used to install BMPES 15.0 AIO (or any sider compatible mod) and update 15.10 on my
-headless Debian server, then launch eFootball PES 2021 through Steam with
-Sider and Proton Experimental. No desktop environment is needed on the
-server. The graphical installers ran in a temporary Xvfb session viewed
-over an SSH tunnel; the game uses its normal Steam display.
+Install a Windows based PES 2021 mod without a desktop environment on the
+host, then launch the game through Steam with Sider running first. Mods with
+no graphical installer can skip the temporary display steps.
 
-This repository contains instructions and my small Steam wrapper. It does
-**not** contain PES 2021, BMPES, Sider binaries, Windows installers, Proton
-prefixes, save files, or passwords. Obtain those from their respective
-sources.
+This method was used with the Steam release of eFootball PES 2021 (AppID
+`1259970`) and Proton Experimental on Debian. Your paths, Proton version,
+installer names, and installation order may differ. Follow the mod author's
+instructions for the files and destinations.
 
-## Host-specific paths
+This repository contains a small Steam launch script and instructions. It
+does not include the game, a mod, Sider binaries, installers, Proton prefixes,
+save data, or credentials.
 
-| Item | Path or value |
-| --- | --- |
-| Steam AppID | `1259970` |
-| Game directory | `/srv/storage/games/steam/steamapps/common/eFootball PES 2021` |
-| Proton prefix | `/srv/storage/games/steam/steamapps/compatdata/1259970/pfx` |
-| Proton | `~/.steam/debian-installation/steamapps/common/Proton - Experimental/proton` |
-| Steam launch wrapper | `~/scripts/start-pes-via-sider.sh` |
+## The approach
 
-Change these paths if your Steam library differs. The wrapper checks Steam's
-exact game path and stops if it does not match.
+1. If your mod has a graphical Windows installer, run it under Proton in a
+   temporary `Xvfb` display. View it through VNC over an SSH tunnel, then
+   close the display when installation is complete.
+2. Add `start.game = "PES2021.exe"` to your existing `sider.ini`. Preserve
+   the mod's other settings.
+3. Set Steam Launch Options to run this repository's wrapper with
+   `%command%`. The wrapper preserves Steam's Proton command, starts
+   `sider.exe` in place of `PES2021.exe`, and Sider starts the game.
 
-## Procedure
+The wrapper expects `sider.exe` beside `PES2021.exe` in the Steam game
+directory. If your mod uses a different layout, adapt the wrapper and
+`start.game` path to that layout.
 
-1. Confirm PES starts from Steam with Proton Experimental before applying
-   BMPES. Back up the game and save data as needed.
-2. Follow [Headless Windows installers](docs/headless-installers.md) to install
-   BMPES 15.0 AIO Parts 01, 02, and 03, followed by update 15.10 Parts 01
-   and 02. The Save installers target the existing save directory in the
-   Proton prefix, while the other parts target the game directory.
-3. Stop the temporary VNC, Openbox, and Xvfb `:99` session after installation.
-   Leave unrelated Xvfb displays and Steam processes alone.
-4. Follow [Start Sider through Steam](docs/sider-steam.md) to add
-   `start.game = "PES2021.exe"` to the existing `sider.ini`, install the
-   wrapper, and set Steam Launch Options.
-5. Verify fresh `sider-app.log` and `sider.log` timestamps and confirm the
-   BMPES content inside the game.
+## Before you begin
 
-The native `sider7-linux` ptrace injector was tested but is **not** used by
-this working setup. Steam starts `sider.exe`, which initializes and then
-launches `PES2021.exe` through Sider's `start.game` option.
+- Confirm the game starts normally from Steam with your chosen Proton version
+  before installing the mod. Keep using that version and compatibility prefix.
+- Back up the game, relevant saves, and any existing `sider.ini`.
+- Obtain the game and mod from sources you trust. Read the mod's own
+  instructions for installation order and target directories.
+- For remote graphical installation, have SSH access to the host and a VNC
+  viewer on your client computer.
 
-## Keeping only my changes
+## Guides
 
-This repository tracks the wrapper and instructions only. I keep my actual
-BMPES `sider.ini` and its many `cpk.root`/`lua.module` lines with the
-game files, not in Git. The documented one-line `start.game` change is the
-part needed for this launch method. No upstream Sider or Proton source was
-modified.
+- [Run graphical Windows installers on a headless host](docs/headless-installers.md)
+- [Start Sider before PES 2021 through Steam](docs/sider-steam.md)
 
-The launch wrapper installed at `~/scripts/start-pes-via-sider.sh` is a copy
-of [start-pes-via-sider.sh](start-pes-via-sider.sh). If I change that installed
-copy, I copy it back into this repository and review `git diff` before
-committing. This repository can stay private.
+If the mod is already installed, start with the second guide. The wrapper
+checks the final executable supplied by Steam and refuses an unexpected
+command. It does not modify game files or manage the temporary display.
+
+Keep downloaded mod assets, your `sider.ini`, and private files outside this
+repository. Only the reusable instructions and launch script belong here.

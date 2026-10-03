@@ -1,33 +1,43 @@
-# Install BMPES without a desktop environment
+# Run graphical Windows installers on a headless host
 
-This procedure ran on Debian 13 (`phantom`) with a macOS client. All
-`SERVER` commands run as the normal user (`eloy`), not root, except
-package installation. The temporary VNC service binds to loopback, so the
-Mac connects through SSH.
+Use this guide only if your mod ships with a graphical Windows installer.
+Run **host** commands as your normal Linux user; **client** means your
+computer. These examples use X display `:99` and VNC port `5902`. Choose
+unused numbers if either is occupied.
 
-## 1. Check the existing Steam game and prerequisites (SERVER)
+## 1. Locate the game and Proton (host)
+
+Replace the example game path with your Steam library path. Adjust the Steam
+client and Proton locations if yours differ:
 
 ```bash
-game='/srv/storage/games/steam/steamapps/common/eFootball PES 2021'
-test -f "$game/PES2021.exe"
-test -d /srv/storage/games/steam/steamapps/compatdata/1259970/pfx
-test -x "$HOME/.steam/debian-installation/steamapps/common/Proton - Experimental/proton"
-command -v Xvfb
-command -v openbox
-command -v x11vnc
+game_dir='/path/to/steam-library/steamapps/common/eFootball PES 2021'
+steam_client="$HOME/.steam/debian-installation"
+proton="$steam_client/steamapps/common/Proton - Experimental/proton"
+steamapps_dir=$(dirname -- "$(dirname -- "$game_dir")")
+compat_data="$steamapps_dir/compatdata/1259970"
+
+test -f "$game_dir/PES2021.exe"
+test -d "$compat_data/pfx"
+test -x "$proton"
 ```
 
-If the three display utilities are absent on a Debian host:
+If a check fails, find your actual paths before continuing. Use the Proton
+version and compatibility prefix that already launch your game. Make a backup
+and check free space before installing a mod.
+
+## 2. Start a temporary display (host)
+
+Install `Xvfb`, `openbox`, and `x11vnc`. On Debian based systems:
 
 ```bash
 sudo apt update
 sudo apt install xvfb openbox x11vnc
 ```
 
-Keep using the Proton version and prefix that already run this Steam game.
-Check free disk space before installing the mod.
-
-## 2. Create a separate VNC password (SERVER, once)
+Create a separate VNC password. Do not reuse an SSH or sudo password.
+Traditional VNC password authentication has an eight character limit; keep
+the VNC service bound to loopback and connect through SSH.
 
 ```bash
 mkdir -p "$HOME/.vnc"
@@ -36,107 +46,85 @@ x11vnc -storepasswd
 chmod 600 "$HOME/.vnc/passwd"
 ```
 
-Use a separate VNC password. Do not reuse the SSH or sudo password. The
-traditional VNC authentication protocol considers only the first eight
-password characters. Keep the password file out of this repository.
-
-## 3. Start a temporary display (SERVER)
+In a terminal you can keep open:
 
 ```bash
 Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp \
-  > /tmp/bmpes-xvfb.log 2>&1 &
+  > /tmp/pes-install-xvfb.log 2>&1 &
 xvfb_pid=$!
 
-DISPLAY=:99 openbox > /tmp/bmpes-openbox.log 2>&1 &
+DISPLAY=:99 openbox > /tmp/pes-install-openbox.log 2>&1 &
 openbox_pid=$!
 
 x11vnc -display :99 -localhost -rfbport 5902 -forever -shared \
-  -rfbauth "$HOME/.vnc/passwd" > /tmp/bmpes-vnc.log 2>&1 &
+  -rfbauth "$HOME/.vnc/passwd" > /tmp/pes-install-vnc.log 2>&1 &
 vnc_pid=$!
 
 printf 'Xvfb=%s Openbox=%s x11vnc=%s\n' \
   "$xvfb_pid" "$openbox_pid" "$vnc_pid"
 ```
 
-Keep this terminal open, or save the three PIDs. If `:99` or `5902`
-is already in use, inspect the existing processes first rather than
-starting duplicates.
+Record the PIDs. A blank desktop is normal until an installer opens. The
+VNC listener is local to the host, so no router or firewall port is needed.
 
-## 4. Connect from macOS
+## 3. Connect the viewer (client)
 
-Leave this running in a Mac Terminal, replacing `<server-address>`:
+Replace `<user>` and `<host>` with your SSH login and server address:
 
 ```bash
-ssh -N -L 5902:127.0.0.1:5902 eloy@<server-address>
+ssh -N -L 5902:127.0.0.1:5902 <user>@<host>
 ```
 
-In another Mac Terminal:
+Leave the tunnel running. Point a VNC viewer to `127.0.0.1:5902` and use
+the VNC password created above. On macOS, you can open Screen Sharing with:
 
 ```bash
 open 'vnc://127.0.0.1:5902'
 ```
 
-Enter the VNC password from step 2. Openbox can show a black screen
-until an installer opens. No LAN/router VNC rule is necessary because
-`x11vnc` is bound to loopback.
+## 4. Run the installers under Proton (host)
 
-## 5. Run the installers in order (SERVER, another SSH terminal)
+In another host terminal, set the variables from step 1 again if necessary.
+Then set the display and the game's existing Steam paths:
 
 ```bash
 export DISPLAY=:99
-export STEAM_COMPAT_DATA_PATH='/srv/storage/games/steam/steamapps/compatdata/1259970'
-export STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/debian-installation"
-PROTON="$HOME/.steam/debian-installation/steamapps/common/Proton - Experimental/proton"
+export STEAM_COMPAT_DATA_PATH="$compat_data"
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="$steam_client"
 
-cd '/srv/storage/downloads/Bmpes 15.0 ( Versão AIO )/Instalador da atualização/Parte 01'
-"$PROTON" run './Bmpes Instalador.part001.exe'
+installer='/path/to/mod/installer.exe'
+cd -- "$(dirname -- "$installer")"
+"$proton" run "./$(basename -- "$installer")"
 ```
 
-Wait for each installer to finish. Launch the next executable from its
-own directory, keeping adjacent multipart data together:
+Replace `installer` with the actual executable. Run each part in the order
+given by the mod author and wait for it to finish. Keep multipart installer
+files together in their original directory.
 
-| Order | Installer | Target chosen inside installer |
-| --- | --- | --- |
-| 1 | BMPES 15.0 AIO, `Parte 01/Bmpes Instalador.part001.exe` | Game directory |
-| 2 | BMPES 15.0 AIO, `Parte 02/Versão da Database.exe` | Game directory |
-| 3 | BMPES 15.0 AIO, `Parte 03 ( Save )/Parte 03 ( Save ).exe` | Existing PES save directory in Proton prefix |
-| 4 | Update 15.10, `Parte 01/Instalador BMPES.part01.exe` | Game directory |
-| 5 | Update 15.10, `Parte 02 ( Save )/Save.exe` | Existing PES save directory in Proton prefix |
+An installer may target the **game directory** or a **save directory inside
+the Proton prefix**. Inspect the existing save tree under
+`"$compat_data/pfx/drive_c/users"`; do not guess a save destination. Proton
+usually exposes Linux paths to Windows programs under `Z:\\`.
 
-The source folders are beneath `/srv/storage/downloads/Bmpes 15.0
-( Versão AIO )/Instalador da atualização` and
-`/srv/storage/downloads/Atualização 15.10/Instalador da atualização`.
-The installed PES save directory is inside the Proton prefix, not the game
-directory; inspect its existing `Documents/KONAMI/.../save` tree before
-choosing a path. Proton exposes Linux files to Windows installers under
-`Z:\\`, for example `Z:\\srv\\storage\\games\\steam\\steamapps\\common\\eFootball PES 2021`.
+Read any installer errors. A file sharing violation can mean another process
+has the file open. Close installers and mod launchers before testing the game.
 
-Read each installer's final message. A file-sharing violation is a real
-file access error, not evidence that the absence of a desktop environment
-caused it. The optional `BMPES Launcher.exe` was not needed in this
-working setup. A launcher left running in the Proton prefix had earlier
-prevented a subsequent Steam launch; close it normally before testing
-the game.
+## 5. Close the temporary display
 
-## 6. Shut down the temporary session
-
-Close the Windows installer and its Proton process. On the Mac, close
-Screen Sharing and press Ctrl+C in the SSH tunnel terminal. In the
-original SERVER terminal:
+Close the installer and viewer. Stop the client SSH tunnel with Ctrl+C. In
+the original host terminal, stop only the PIDs you recorded:
 
 ```bash
 kill -TERM "$vnc_pid" "$openbox_pid" "$xvfb_pid"
 ```
 
-If that shell is gone, first identify the exact `:99`/VNC processes:
+If that shell is gone, identify the exact `:99` and VNC processes first:
 
 ```bash
 ps -eo pid,comm,args |
   awk '$2=="Xvfb" || $2=="x11vnc" || $2=="openbox" {print}'
-ss -ltnp | grep -E ':59[0-9][0-9]([[:space:]]|$)' || true
+ss -ltnp | grep -E ':5902([[:space:]]|$)' || true
 ```
 
-Terminate only the processes associated with display `:99` and its VNC
-port. An unrelated Xvfb process may belong to Steam. Verify the `:99`
-processes and VNC listener disappear. Leave game files and the Proton
-prefix intact.
+Other X displays may belong to Steam or unrelated services. Leave the
+game's Proton prefix intact; it may contain saves and settings.
